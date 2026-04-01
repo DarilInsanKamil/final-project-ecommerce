@@ -29,6 +29,7 @@ Route::middleware('auth')->group(function () {
 
     // Payments
     Route::get('/payment/{booking}/process', [PaymentController::class, 'process'])->name('payment.process');
+    Route::get('/payment/{booking}/check', [PaymentController::class, 'checkStatus'])->name('payment.check');
 });
 
 Route::get('/', [HomeController::class, 'index'])->name('home');

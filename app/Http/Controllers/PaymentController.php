@@ -54,35 +54,83 @@ class PaymentController extends Controller
         return view('bookings.payment', compact('booking', 'payment', 'transaction'));
     }
 
-    public function webhook(Request $request, FonnteService $fonnte)
+    public function checkStatus(Booking $booking, PakKasirService $pakKasir, FonnteService $fonnte)
+    {
+        $payment = $booking->payment;
+
+        if (!$payment) {
+            return back()->with('error', 'Data pembayaran tidak ditemukan.');
+        }
+
+        if ($payment->status === 'paid') {
+            return back()->with('success', 'Pembayaran sudah lunas.');
+        }
+
+        $detail = $pakKasir->getTransactionDetail($payment->invoice_id, $payment->amount);
+
+        if ($detail && ($detail['status'] === 'completed' || $detail['status'] === 'paid')) {
+            $this->markAsPaid($payment, $fonnte);
+            return back()->with('success', 'Pembayaran berhasil dikonfirmasi!');
+        }
+
+        return back()->with('info', 'Pembayaran belum diterima. Silakan selesaikan pembayaran Anda.');
+    }
+
+    public function webhook(Request $request, PakKasirService $pakKasir, FonnteService $fonnte)
     {
         $payload = $request->all();
         Log::info('Pak Kasir Webhook received', $payload);
 
-        // Map payload based on actual Pak Kasir structure
         $invoiceId = $request->input('order_id');
-        $transactionStatus = $request->input('status'); // Pak Kasir uses "status"
-
+        $amount = $request->input('amount');
+        
         $payment = Payment::where('invoice_id', $invoiceId)->first();
 
         if (!$payment) {
+            Log::error('Webhook: Payment not found', ['invoice_id' => $invoiceId]);
             return response()->json(['message' => 'Payment not found'], 404);
         }
 
-        if ($transactionStatus == 'completed') {
-            $payment->update([
-                'status' => 'paid',
-                'paid_at' => now(),
-            ]);
+        // Security: Verify with Transaction Detail API before confirmed
+        // This confirms the webhook data is legit
+        $detail = $pakKasir->getTransactionDetail($invoiceId, $amount);
 
-            $booking = $payment->booking;
-            $booking->update(['status' => 'confirmed']);
-
-            // Notify Customer
-            $message = "Halo {$booking->customer_name},\nPembayaran as sebesar Rp " . number_format($payment->amount, 0, ',', '.') . " berhasil dikonfirmasi. Sampai jumpa di BarberKu pada {$booking->booking_date} pukul {$booking->booking_time}!";
-            $fonnte->sendMessage($booking->customer_phone, $message);
+        if ($detail && ($detail['status'] === 'completed' || $detail['status'] === 'paid')) {
+            $this->markAsPaid($payment, $fonnte);
+            return response()->json(['message' => 'Webhook verified and processed']);
         }
 
-        return response()->json(['message' => 'Webhook processed']);
+        Log::warning('Webhook: Detail verification failed or pending', ['detail' => $detail]);
+        return response()->json(['message' => 'Transaction not completed yet or invalid']);
+    }
+
+    /**
+     * Mark a payment as paid and confirm the booking.
+     */
+    private function markAsPaid(Payment $payment, FonnteService $fonnte)
+    {
+        if ($payment->status === 'paid') {
+            return;
+        }
+
+        $payment->update([
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        $booking = $payment->booking;
+        $booking->update(['status' => 'confirmed']);
+
+        // Notify Customer via WhatsApp
+        $formattedAmount = number_format($payment->amount, 0, ',', '.');
+        $message = "Halo *{$booking->customer_name}*,\n\n" .
+                   "Pembayaran Anda sebesar *Rp {$formattedAmount}* telah kami terima dan dikonfirmasi.\n\n" .
+                   "Detail Booking:\n" .
+                   "- Layanan: {$booking->service->name}\n" .
+                   "- Tanggal: {$booking->booking_date}\n" .
+                   "- Jam: {$booking->booking_time}\n\n" .
+                   "Sampai jumpa di BarberKu! 💈";
+
+        $fonnte->sendMessage($booking->customer_phone, $message);
     }
 }

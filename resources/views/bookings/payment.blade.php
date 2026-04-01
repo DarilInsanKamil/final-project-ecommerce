@@ -39,10 +39,28 @@
             </ol>
         </div>
 
+        <div class="mb-4">
+            @if(session('success'))
+                <div class="p-4 rounded-xl bg-green-500/20 border border-green-500/50 text-green-400 text-sm mb-4">
+                    {{ session('success') }}
+                </div>
+            @endif
+            @if(session('info'))
+                <div class="p-4 rounded-xl bg-blue-500/20 border border-blue-500/50 text-blue-400 text-sm mb-4">
+                    {{ session('info') }}
+                </div>
+            @endif
+            @if(session('error'))
+                <div class="p-4 rounded-xl bg-red-500/20 border border-red-500/50 text-red-400 text-sm mb-4">
+                    {{ session('error') }}
+                </div>
+            @endif
+        </div>
+
         <div class="flex flex-col sm:flex-row gap-4 justify-center">
-            <button onclick="window.location.reload()" class="btn-secondary flex-1 flex items-center justify-center gap-2">
+            <a href="{{ route('payment.check', $booking->id) }}" class="btn-secondary flex-1 flex items-center justify-center gap-2">
                 <i class='bx bx-refresh'></i> Check Status
-            </button>
+            </a>
             <a href="{{ route('user.profile') }}" class="btn-primary flex-1 flex items-center justify-center gap-2">
                 <i class='bx bx-list-ul'></i> My Bookings
             </a>

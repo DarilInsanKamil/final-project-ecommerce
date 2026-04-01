@@ -100,6 +100,44 @@ class PakKasirService
     }
 
     /**
+     * Get transaction detail from Pak Kasir API.
+     *
+     * GET https://app.pakasir.com/api/transactiondetail?project={slug}&amount={amount}&order_id={order_id}&api_key={api_key}
+     *
+     * Response: { "transaction": { "amount": 22000, "status": "completed", ... } }
+     */
+    public function getTransactionDetail(string $orderId, float $amount): ?array
+    {
+        try {
+            $params = [
+                'project' => $this->project,
+                'amount' => (int) $amount,
+                'order_id' => $orderId,
+                'api_key' => $this->apiKey,
+            ];
+
+            Log::info('PakKasir: Checking transaction detail', $params);
+
+            $response = Http::get("{$this->baseUrl}/transactiondetail", $params);
+
+            Log::info('PakKasir: Detail response', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+
+            if ($response->successful()) {
+                $json = $response->json();
+                return $json['transaction'] ?? null;
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::error('PakKasir Detail Exception: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Simulate payment (Sandbox only).
      */
     public function simulatePayment(string $orderId, float $amount): ?array
